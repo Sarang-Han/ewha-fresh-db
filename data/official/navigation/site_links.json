@@ -52,6 +52,14 @@
       "url_aliases": [
       ],
       "description": "이화여자대학교 실시간 셔틀버스 운행/노선 정보 페이지"
+    },
+    {
+      "name": "이화여자대학교 입학처",
+      "url": "https://admission.ewha.ac.kr",
+      "url_aliases": [
+        "https://admission.ewha.ac.kr/admission/html/main/intro.asp"
+      ],
+      "description": "이화여자대학교 입학처 공식 홈페이지 (입학 안내, 전형 정보, 모집 요강 등)"
     }
   ],
   "updated_at": "2025-10-05"
