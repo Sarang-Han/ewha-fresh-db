@@ -14,8 +14,6 @@ url: "https://ewha.ac.kr/ewha/bachelor/enrollment01.do"
 
 ## 정규등록
 
-- **학칙  제21조(등록), 제28조(제적)**
-
 ### **정의**
 
 - 수업연한(이수학기) 이내에 등록을 하는 것
