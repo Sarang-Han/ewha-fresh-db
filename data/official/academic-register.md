@@ -9,7 +9,7 @@ topics:
   - "제적"
   - "재입학"
   - "학적기재사항 변경"
-  - "FAQ"
+  - "학적변동 FAQ"
 url: "https://ewha.ac.kr/ewha/bachelor/register01.do"
 ---
 
@@ -334,7 +334,7 @@ url: "https://ewha.ac.kr/ewha/bachelor/register01.do"
     2. 증빙서류 첨부 (주민등록초본, 기본증명서 등)
     3. 방문 또는 우편접수 (학부: 학적팀) → 이메일 접수는 불가함
 
-## 학적변동 통합 FAQ
+## 학적변동 FAQ
 
 | 번호 | 구분 | 질문 | 답변 |
 | --- | --- | --- | --- |

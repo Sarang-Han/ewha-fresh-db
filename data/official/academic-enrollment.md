@@ -6,7 +6,7 @@ topics:
   - "정규등록"
   - "학점등록"
   - "계절학기등록"
-  - "FAQ"
+  - "등록 FAQ"
 url: "https://ewha.ac.kr/ewha/bachelor/enrollment01.do"
 ---
 
@@ -140,7 +140,7 @@ url: "https://ewha.ac.kr/ewha/bachelor/enrollment01.do"
 
 등록금을 납부하지 않으면 수강신청 내역이 자동 취소됨
 
-## FAQ
+## 등록 FAQ
 
 | 번호 | 구분 | 질문 | 답변 |
 | --- | --- | --- | --- |
