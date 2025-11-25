@@ -47,6 +47,7 @@ url: "https://ewha.ac.kr/ewha/bachelor/course01.do"
     - 의과대학 의학과
         - 수강신청 학점: 1~24학점 이내
         - 초과학점 신청이 가능한 경우: 24학점까지 신청가능
+- 수강신청 관련 자세한 안내는 [수강신청 가이드](https://www.ewha.ac.kr/ewha/etc/course-guide01.do)를 참고바람.
 
 ### **수강신청 확인 및 변경**
 

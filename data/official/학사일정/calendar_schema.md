@@ -1,0 +1,8 @@
+- academic_year: 학년도 (예: 2025)
+- start_date / end_date: YYYY-MM-DD
+- semester: "1", "2", "summer", "winter"
+- event_type: "course_registration", "exam_midterm", "holiday" ...
+- title_raw: 학교에서 쓰는 원문 행사명 (한국어)
+- target: 대상 (신입생, 재학생, 전체 등)
+- is_holiday: 공휴일 여부 (true/false)
+- notes: 비고
