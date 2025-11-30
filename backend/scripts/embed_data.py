@@ -20,7 +20,7 @@ from langchain_core.documents import Document
 sys.path.append(str(Path(__file__).parent.parent))
 
 from app.config import settings
-from app.rag_engine import E5Embeddings
+from app.guide_pipeline import E5Embeddings
 
 # 로깅 설정
 logging.basicConfig(
