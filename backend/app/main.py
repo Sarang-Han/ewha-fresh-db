@@ -126,7 +126,14 @@ async def ask_question(request: ChatRequest):
             
         else:
             # OTHER: 기본 응답 (버디 캐릭터)
-            answer = "안녕! 나는 이화여대 학사 안내봇 버디야 🐻 궁금한 게 있으면 편하게 물어봐! 내가 도와줄게 💚"
+            answer = """음... 이 부분은 버디가 가진 자료에서 찾기 어려운 내용이야 🥲
+
+혹시 더 정확한 정보가 필요하다면 아래를 참고해봐!
+• 📞 학적팀: 02-3277-2114
+• 🌐 이화 포탈: https://portal.ewha.ac.kr
+• 📋 학사안내: https://ewha.ac.kr/ewha/bachelor.do
+
+그래도 학사 관련 질문이 있으면 다시 물어봐! 내가 아는 범위에서 최대한 도와줄게 💚"""
             sources = []
         
         logger.info(f"답변 생성 완료 (Intent: {intent.value}, 출처: {len(sources)}개)")
