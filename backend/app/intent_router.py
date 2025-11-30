@@ -36,24 +36,45 @@ SCHEDULE_KEYWORDS = [
     "언제", "기간", "날짜", "시간", "일정", "마감", "몇 번", "몇번"
 ]
 
+# GUIDE 파이프라인으로 분류할 키워드 목록 (규정/절차/제도)
+GUIDE_KEYWORDS = [
+    # 학적변동
+    "휴학", "복학", "자퇴", "제적", "재입학",
+    # 전공
+    "복수전공", "부전공", "연계전공", "융합전공", "마이크로전공", "전과",
+    "전공결정", "전공변경",
+    # 졸업/성적
+    "졸업요건", "졸업학점", "성적", "학점", "평점", "우등", "학사경고",
+    "재수강", "학점인정",
+    # 수강 규정 (일정이 아닌 제도)
+    "석사", "대학원", "석사학위과정", "석사과목", "대학원 과목",
+    "학점교류", "교환학생",
+    # 자격증
+    "교원자격증", "교직", "평생교육사",
+    # 기타 제도
+    "학점이월", "초과학점", "수업연한",
+]
+
 # LLM 라우터 프롬프트 템플릿
 ROUTER_PROMPT_TEMPLATE = """[시스템 역할]
 당신은 이화여자대학교 학사 챗봇의 질문 분류기입니다.
 사용자의 질문을 보고 아래 세 가지 중 하나로만 분류하세요.
 
 - SCHEDULE: 수강신청, 장바구니, 학사일정, 등록 기간, 정정/철회 기간, 개강/종강 날짜,
-            채플(결석 횟수, 보충채플 일정 포함), 계절학기, 공휴일, 휴무일,
+            채플(결석 횟수, 보충채플 일정 포함), 계절학기 일정, 공휴일, 휴무일,
             복학/휴학 신청 기간, 입학식/졸업식 날짜 등
-            학사 캘린더에서 찾을 수 있는 모든 일정 및 관련 규정 질문.
             "언제", "기간", "날짜", "시간", "몇 번" 등을 묻는 질문.
 - GUIDE   : 휴학/복학/자퇴의 절차와 조건, 전과, 복수전공 신청 방법,
-            졸업요건, 성적 산출 방식, 재수강 규정, 학점 인정 등
+            졸업요건, 성적 산출 방식, 재수강 규정, 학점 인정,
+            **학부생의 석사/대학원 과목 수강 자격 및 조건**,
+            학점교류 자격요건, 교원자격증/평생교육사 취득 조건 등
             학사 제도의 상세 규정/절차/방법을 묻는 질문.
 - OTHER   : 위 두 가지에 해당하지 않는 잡담, 인사, 일반 질문 등.
 
 [중요]
 - 채플 관련 질문(결석 허용 횟수, 보충채플, 채플 기간 등)은 SCHEDULE입니다.
-- "몇 번", "몇 회" 같은 횟수 질문도 학사일정과 관련되면 SCHEDULE입니다.
+- "석사 과목 수강 가능?", "대학원 과목 들을 수 있어?" 같은 자격/조건 질문은 GUIDE입니다.
+- "석사 수강신청 언제야?" 같은 일정 질문은 SCHEDULE입니다.
 
 반드시 SCHEDULE, GUIDE, OTHER 중 하나의 단어만 출력하세요.
 
@@ -123,11 +144,33 @@ def classify_intent(
     """
     message_lower = message.lower()
     
-    # 1단계: 키워드 기반 Pre-check
+    # 1단계: 키워드 기반 Pre-check (양쪽 모두 체크 후 우선순위 결정)
+    schedule_matched = None
+    guide_matched = None
+    
+    # SCHEDULE 키워드 체크
     for keyword in SCHEDULE_KEYWORDS:
         if keyword in message_lower:
-            logger.info(f"Intent 분류 (키워드 '{keyword}' 매칭): SCHEDULE")
-            return Intent.SCHEDULE
+            schedule_matched = keyword
+            break
+    
+    # GUIDE 키워드 체크
+    for keyword in GUIDE_KEYWORDS:
+        if keyword in message_lower:
+            guide_matched = keyword
+            break
+    
+    # 둘 다 매칭된 경우: GUIDE 우선 (규정/자격 질문이 일정보다 구체적)
+    # 예: "석사 과목 수강신청 가능?" → "석사" + "수강신청" 둘 다 있으면 GUIDE
+    if guide_matched and schedule_matched:
+        logger.info(f"Intent 분류 (GUIDE '{guide_matched}' 우선, SCHEDULE '{schedule_matched}' 무시): GUIDE")
+        return Intent.GUIDE
+    elif guide_matched:
+        logger.info(f"Intent 분류 (키워드 '{guide_matched}' 매칭): GUIDE")
+        return Intent.GUIDE
+    elif schedule_matched:
+        logger.info(f"Intent 분류 (키워드 '{schedule_matched}' 매칭): SCHEDULE")
+        return Intent.SCHEDULE
     
     # 2단계: LLM 라우터로 분류
     logger.info("Intent 분류: LLM 라우터 사용")

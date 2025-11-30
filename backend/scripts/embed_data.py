@@ -30,9 +30,52 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def parse_yaml_frontmatter(content: str) -> tuple[dict, str]:
+    """
+    Markdown 문서에서 YAML frontmatter 파싱
+    
+    Args:
+        content: 문서 전체 내용
+    
+    Returns:
+        (메타데이터 dict, frontmatter 제외한 본문)
+    """
+    import yaml
+    
+    if not content.startswith("---"):
+        return {}, content
+    
+    # frontmatter 끝 찾기
+    end_idx = content.find("---", 3)
+    if end_idx == -1:
+        return {}, content
+    
+    frontmatter_str = content[3:end_idx].strip()
+    body = content[end_idx + 3:].strip()
+    
+    try:
+        metadata = yaml.safe_load(frontmatter_str)
+        if metadata is None:
+            metadata = {}
+        
+        # ChromaDB는 리스트 타입을 지원하지 않으므로 문자열로 변환
+        # topics 리스트를 문자열로 변환 (검색용)
+        if "topics" in metadata and isinstance(metadata["topics"], list):
+            metadata["topics"] = " ".join(metadata["topics"])
+        
+        # category_path 리스트를 문자열로 변환
+        if "category_path" in metadata and isinstance(metadata["category_path"], list):
+            metadata["category_path"] = " > ".join(metadata["category_path"])
+        
+        return metadata, body
+    except yaml.YAMLError as e:
+        logger.warning(f"YAML frontmatter 파싱 실패: {e}")
+        return {}, content
+
+
 def load_markdown_documents(data_dir: str) -> List[Document]:
     """
-    Markdown 문서 로드
+    Markdown 문서 로드 (YAML frontmatter 메타데이터 포함)
     
     Args:
         data_dir: 데이터 디렉터리 경로
@@ -43,20 +86,33 @@ def load_markdown_documents(data_dir: str) -> List[Document]:
     logger.info(f"Markdown 문서 로드 중: {data_dir}")
     
     documents = []
+    data_path = Path(data_dir)
     
-    # .md 파일 로드
-    try:
-        loader = DirectoryLoader(
-            data_dir,
-            glob="**/*.md",
-            loader_cls=TextLoader,
-            loader_kwargs={"encoding": "utf-8"}
-        )
-        documents.extend(loader.load())
-        logger.info(f"로드된 Markdown 문서: {len(documents)}개")
-    except Exception as e:
-        logger.error(f"Markdown 문서 로드 실패: {str(e)}")
+    # .md 파일 직접 순회하여 frontmatter 파싱
+    for md_file in data_path.glob("**/*.md"):
+        try:
+            with open(md_file, "r", encoding="utf-8") as f:
+                content = f.read()
+            
+            # YAML frontmatter 파싱
+            metadata, body = parse_yaml_frontmatter(content)
+            
+            # source 메타데이터 추가 (상대 경로)
+            relative_path = md_file.relative_to(data_path.parent)
+            metadata["source"] = str(relative_path)
+            
+            # 빈 문서는 스킵
+            if not body.strip():
+                logger.warning(f"빈 문서 스킵: {md_file}")
+                continue
+            
+            doc = Document(page_content=body, metadata=metadata)
+            documents.append(doc)
+            
+        except Exception as e:
+            logger.error(f"문서 로드 실패 ({md_file}): {e}")
     
+    logger.info(f"로드된 Markdown 문서: {len(documents)}개")
     return documents
 
 

@@ -77,8 +77,8 @@ class HybridRetriever:
         self.vectorstore = vectorstore
         self.documents = documents
         
-        # BM25 인덱스 생성
-        self.tokenized_corpus = [self._tokenize(doc.page_content) for doc in documents]
+        # BM25 인덱스 생성 (본문 + topics 메타데이터 포함)
+        self.tokenized_corpus = [self._tokenize_with_metadata(doc) for doc in documents]
         self.bm25 = BM25Okapi(self.tokenized_corpus)
         
         logger.info(f"하이브리드 검색기 초기화 완료 (문서 수: {len(documents)})")
@@ -87,6 +87,30 @@ class HybridRetriever:
         """한국어/영어 토큰화"""
         tokens = re.findall(r'[가-힣]+|[a-zA-Z]+|[0-9]+', text.lower())
         return tokens
+    
+    def _tokenize_with_metadata(self, doc: Document) -> List[str]:
+        """문서 본문 + 메타데이터(topics) 토큰화"""
+        # 본문 토큰화
+        content_tokens = self._tokenize(doc.page_content)
+        
+        # topics 메타데이터가 있으면 추가 토큰화 (가중치 부여를 위해 3회 반복)
+        metadata = doc.metadata if doc.metadata else {}
+        
+        # topics가 문자열이면 파싱 시도
+        topics_str = metadata.get("topics", "")
+        if topics_str:
+            # YAML frontmatter에서 온 topics 리스트 파싱
+            topic_tokens = self._tokenize(topics_str)
+            # topics는 중요하므로 가중치 부여 (3배)
+            content_tokens.extend(topic_tokens * 3)
+        
+        # title도 추가 (2배 가중치)
+        title = metadata.get("title", "")
+        if title:
+            title_tokens = self._tokenize(title)
+            content_tokens.extend(title_tokens * 2)
+        
+        return content_tokens
     
     def retrieve(self, query: str, k: int = 8, alpha: float = 0.5) -> List[Document]:
         """

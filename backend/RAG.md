@@ -412,19 +412,3 @@ class Settings:
 수강신청 일정이나 학사 제도에 대해 궁금한 게 있으면 편하게 물어봐! 
 내가 도와줄게 💚
 ```
-
-## 향후 개선 방향
-
-### High Priority
-1. **형태소 분석기 도입** (KoNLPy, Mecab) → BM25 토큰화 개선
-2. **동적 하이브리드 가중치** → 쿼리 유형별 alpha 조정
-3. **전공 데이터베이스화** → 하드코딩 제거
-
-### Medium Priority
-4. **Reranking 모델** → Cross-encoder 기반 재정렬
-5. **대화 컨텍스트 유지** → 멀티턴 대화 지원
-6. **에러 핸들링 강화** → Exponential backoff, Fallback
-
-### Low Priority
-7. **로깅/모니터링** → 검색 품질 메트릭
-8. **사용자 피드백 수집** → 답변 품질 개선

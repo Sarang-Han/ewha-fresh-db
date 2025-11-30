@@ -32,16 +32,6 @@ backend/
 └── README.md
 ```
 
-### 서버 실행
-
-```bash
-# 개발 모드 (hot reload)
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# 또는
-uv run python app/main.py
-```
-
 ## Docker 실행
 
 ### 로컬 Docker
@@ -57,7 +47,7 @@ docker run -p 8000:8000 \
   ewha-chatbot-backend
 ```
 
-### Docker Compose (권장)
+### Docker Compose
 
 ```bash
 # 프로젝트 루트에서 실행
@@ -108,18 +98,3 @@ docker-compose down
   "message": "서비스가 정상 작동 중입니다."
 }
 ```
-
-## 개발 가이드
-
-### 새로운 문서 추가
-
-1. `data/official/` 디렉터리에 Markdown 파일 추가
-2. 임베딩 스크립트 재실행: `uv run python scripts/embed_data.py`
-3. 서버 재시작
-
-### 설정 변경
-
-`backend/.env` 파일 또는 `app/config.py`에서 다음 항목 조정 가능:
-- `LLM_MODEL`: 사용할 Gemini 모델
-- `CHUNK_SIZE`: 문서 분할 크기
-- `TOP_K_RESULTS`: 검색 시 반환할 문서 수
