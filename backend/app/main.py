@@ -4,7 +4,10 @@ from contextlib import asynccontextmanager
 import logging
 
 from app.models import ChatRequest, ChatResponse, HealthResponse
-from app.rag_engine import RAGEngine
+from app.intent_router import classify_intent, Intent
+from app.csv_loader import initialize_csv_texts, get_csv_texts
+from app.schedule_pipeline import answer_schedule_question
+from app.guide_pipeline import initialize_guide_engine, answer_guide_question
 from app.config import settings
 
 # 로깅 설정
@@ -14,19 +17,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# RAG 엔진 전역 인스턴스
-rag_engine: RAGEngine = None
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """애플리케이션 생명주기 관리"""
-    global rag_engine
-    
     # 시작 시
-    logger.info("RAG 엔진 초기화 중...")
-    rag_engine = RAGEngine()
-    logger.info("RAG 엔진 초기화 완료")
+    logger.info("=== 애플리케이션 초기화 시작 ===")
+    
+    # 1. CSV 텍스트 로드 (SCHEDULE 파이프라인용)
+    logger.info("CSV 텍스트 초기화 중...")
+    initialize_csv_texts()
+    
+    # 2. GUIDE 엔진 초기화 (Markdown RAG)
+    logger.info("GUIDE 엔진 초기화 중...")
+    initialize_guide_engine()
+    
+    logger.info("=== 애플리케이션 초기화 완료 ===")
     
     yield
     
@@ -75,6 +81,12 @@ async def ask_question(request: ChatRequest):
     """
     질문에 대한 답변을 반환하는 엔드포인트
     
+    새 아키텍처:
+    1. Intent Router로 질문 분류 (SCHEDULE, GUIDE, OTHER)
+    2. SCHEDULE: CSV 전체 + LLM으로 처리
+    3. GUIDE: Markdown RAG + LLM으로 처리
+    4. OTHER: 기본 응답
+    
     Args:
         request: 채팅 요청 (세션 ID, 메시지, 학년, 전공 등)
     
@@ -84,14 +96,40 @@ async def ask_question(request: ChatRequest):
     try:
         logger.info(f"세션 {request.session_id}로부터 질문: {request.message}")
         
-        # RAG 엔진을 통해 답변 생성
-        answer, sources = rag_engine.get_answer(
-            query=request.message,
+        # 1. Intent 분류
+        intent = classify_intent(
+            message=request.message,
             user_grade=request.user_grade,
             user_major=request.user_major
         )
+        logger.info(f"Intent 분류 결과: {intent.value}")
         
-        logger.info(f"답변 생성 완료 (출처: {len(sources)}개)")
+        # 2. Intent별 파이프라인 분기
+        if intent == Intent.SCHEDULE:
+            # SCHEDULE: CSV 전체를 LLM에 넘겨 처리
+            csv_texts = get_csv_texts()
+            answer, sources = answer_schedule_question(
+                message=request.message,
+                user_grade=request.user_grade,
+                user_major=request.user_major,
+                course_registration_csv=csv_texts.get("course_registration", ""),
+                academic_calendar_csv=csv_texts.get("academic_calendar", ""),
+            )
+            
+        elif intent == Intent.GUIDE:
+            # GUIDE: Markdown RAG로 처리
+            answer, sources = answer_guide_question(
+                message=request.message,
+                user_grade=request.user_grade,
+                user_major=request.user_major
+            )
+            
+        else:
+            # OTHER: 기본 응답
+            answer = "안녕하세요! 저는 이화여대 학사 챗봇입니다. 수강신청 일정이나 학사 제도에 관해 궁금한 점이 있으시면 질문해 주세요 :)"
+            sources = []
+        
+        logger.info(f"답변 생성 완료 (Intent: {intent.value}, 출처: {len(sources)}개)")
         
         return ChatResponse(
             session_id=request.session_id,

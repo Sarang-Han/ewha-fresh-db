@@ -1,12 +1,14 @@
 """
 데이터 임베딩 스크립트
-data/official/ 디렉터리의 Markdown, CSV 파일들을 읽어서 ChromaDB에 임베딩
+data/official/ 디렉터리의 Markdown 파일들만 읽어서 ChromaDB에 임베딩
+
+NOTE: CSV 파일(수강신청, 학사일정)은 벡터 DB에 포함하지 않음.
+      SCHEDULE 질문은 CSV 전체를 LLM에 직접 전달하는 방식으로 처리.
 """
 import os
 import sys
 from pathlib import Path
 import logging
-import pandas as pd
 from typing import List
 
 from langchain_chroma import Chroma
@@ -55,69 +57,6 @@ def load_markdown_documents(data_dir: str) -> List[Document]:
     except Exception as e:
         logger.error(f"Markdown 문서 로드 실패: {str(e)}")
     
-    return documents
-
-
-def load_csv_documents(data_dir: str, chunk_rows: int = 5) -> List[Document]:
-    """
-    CSV 파일 로드 및 처리
-    
-    Args:
-        data_dir: 데이터 디렉터리 경로
-        chunk_rows: 몇 행씩 묶어서 문서로 만들지
-    
-    Returns:
-        문서 리스트
-    """
-    logger.info(f"CSV 문서 로드 중: {data_dir}")
-    
-    documents = []
-    data_path = Path(data_dir)
-    csv_files = list(data_path.glob("**/*.csv"))
-    
-    logger.info(f"발견된 CSV 파일: {len(csv_files)}개")
-    
-    for csv_file in csv_files:
-        try:
-            df = pd.read_csv(csv_file, encoding="utf-8")
-            logger.info(f"CSV 파일 로드: {csv_file.name} ({len(df)}행)")
-            
-            # 파일명에서 카테고리 추출
-            relative_path = csv_file.relative_to(data_path)
-            category = str(relative_path.parent)
-            
-            # CSV를 청크 단위로 분할하여 문서 생성
-            for start_idx in range(0, len(df), chunk_rows):
-                end_idx = min(start_idx + chunk_rows, len(df))
-                chunk_df = df.iloc[start_idx:end_idx]
-                
-                # 테이블 형태의 텍스트로 변환
-                content_parts = [f"# {csv_file.stem} (행 {start_idx+1}-{end_idx})\n"]
-                content_parts.append(f"카테고리: {category}\n")
-                content_parts.append("## 데이터:\n")
-                
-                for _, row in chunk_df.iterrows():
-                    row_text = " | ".join([f"{col}: {val}" for col, val in row.items() if pd.notna(val)])
-                    content_parts.append(f"- {row_text}")
-                
-                content = "\n".join(content_parts)
-                
-                doc = Document(
-                    page_content=content,
-                    metadata={
-                        "source": str(csv_file.relative_to(data_path.parent)),
-                        "type": "csv",
-                        "category": category,
-                        "file_name": csv_file.name,
-                        "row_range": f"{start_idx+1}-{end_idx}"
-                    }
-                )
-                documents.append(doc)
-            
-        except Exception as e:
-            logger.error(f"CSV 파일 로드 실패 ({csv_file.name}): {str(e)}")
-    
-    logger.info(f"생성된 CSV 문서: {len(documents)}개")
     return documents
 
 
@@ -197,41 +136,35 @@ def main():
         
         logger.info("=== 데이터 임베딩 시작 ===")
         
-        # 1. Markdown 문서 로드
+        # 1. Markdown 문서만 로드 (CSV는 벡터 DB에 포함하지 않음)
         md_documents = load_markdown_documents(str(data_dir))
         logger.info(f"Markdown 문서: {len(md_documents)}개")
         
-        # 2. CSV 문서 로드
-        csv_documents = load_csv_documents(str(data_dir), chunk_rows=settings.csv_chunk_rows)
-        logger.info(f"CSV 문서: {len(csv_documents)}개")
-        
-        # 3. 모든 문서 병합
-        all_documents = md_documents + csv_documents
-        
-        if not all_documents:
-            logger.warning("로드된 문서가 없습니다.")
+        if not md_documents:
+            logger.warning("로드된 Markdown 문서가 없습니다.")
             sys.exit(0)
         
-        logger.info(f"총 문서 수: {len(all_documents)}개")
+        logger.info(f"총 문서 수: {len(md_documents)}개")
         
-        # 4. Markdown 문서만 분할 (CSV는 이미 적절히 분할됨)
+        # 2. Markdown 문서 분할
         split_md_docs = split_documents(
             md_documents,
             chunk_size=settings.chunk_size,
             chunk_overlap=settings.chunk_overlap
-        ) if md_documents else []
+        )
         
-        # 5. 최종 문서 리스트 생성
-        final_documents = split_md_docs + csv_documents
-        logger.info(f"최종 청크 수: {len(final_documents)}개 (Markdown: {len(split_md_docs)}, CSV: {len(csv_documents)})")
+        # 3. 최종 문서 리스트 생성
+        final_documents = split_md_docs
+        logger.info(f"최종 청크 수: {len(final_documents)}개 (Markdown만 포함)")
         
-        # 6. 벡터스토어 생성
+        # 4. 벡터스토어 생성
         persist_dir = str(project_root / "backend" / settings.chroma_persist_dir)
         vectorstore = create_vectorstore(final_documents, persist_dir)
         
         logger.info("=== 데이터 임베딩 완료 ===")
-        logger.info(f"총 {len(all_documents)}개 원본 문서, {len(final_documents)}개 최종 청크 임베딩 완료")
+        logger.info(f"총 {len(md_documents)}개 원본 문서, {len(final_documents)}개 최종 청크 임베딩 완료")
         logger.info(f"벡터스토어 저장 위치: {persist_dir}")
+        logger.info("NOTE: CSV 파일(수강신청, 학사일정)은 별도 파이프라인에서 처리됩니다.")
         
     except Exception as e:
         logger.error(f"임베딩 중 오류 발생: {str(e)}")
