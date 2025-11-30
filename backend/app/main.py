@@ -125,8 +125,8 @@ async def ask_question(request: ChatRequest):
             )
             
         else:
-            # OTHER: 기본 응답
-            answer = "안녕하세요! 저는 이화여대 학사 챗봇입니다. 수강신청 일정이나 학사 제도에 관해 궁금한 점이 있으시면 질문해 주세요 :)"
+            # OTHER: 기본 응답 (버디 캐릭터)
+            answer = "안녕! 나는 이화여대 학사 안내봇 버디야 🐻 궁금한 게 있으면 편하게 물어봐! 내가 도와줄게 💚"
             sources = []
         
         logger.info(f"답변 생성 완료 (Intent: {intent.value}, 출처: {len(sources)}개)")
