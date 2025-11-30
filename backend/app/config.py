@@ -20,8 +20,8 @@ class Settings(BaseSettings):
     llm_model: str = "gemini-2.5-pro"
     llm_temperature: float = 0.3
     
-    # 임베딩 모델 설정 (BGE-M3)
-    embedding_model: str = Field(default="BAAI/bge-m3")
+    # 임베딩 모델 설정 (E5)
+    embedding_model: str = Field(default="intfloat/multilingual-e5-large-instruct")
     embedding_device: str = Field(default="cpu")  # "cuda" for GPU
     
     # RAG 설정

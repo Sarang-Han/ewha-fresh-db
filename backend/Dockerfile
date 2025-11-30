@@ -18,7 +18,7 @@ COPY app/ ./app/
 COPY scripts/ ./scripts/
 
 # 의존성 설치
-RUN uv pip install --system -r pyproject.toml
+RUN uv sync --system
 
 # 포트 노출
 EXPOSE 8000
