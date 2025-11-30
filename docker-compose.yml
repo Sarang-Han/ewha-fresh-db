@@ -1,0 +1,24 @@
+services:
+  backend:
+    build: ./backend
+    container_name: ewha-chatbot-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - CHROMA_PERSIST_DIR=/app/chroma_db
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - LLM_MODEL=gemini-2.0-flash-exp
+      - EMBEDDING_MODEL=models/text-embedding-004
+    volumes:
+      - ./backend/chroma_db:/app/chroma_db
+      - ./backend/app:/app/app
+      - ./data:/app/data
+    restart: unless-stopped
+    networks:
+      - chatbot-network
+
+networks:
+  chatbot-network:
+    driver: bridge
