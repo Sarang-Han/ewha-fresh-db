@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     api_port: int = 8000
     
     # LLM 설정
-    llm_model: str = "gemini-2.5-pro"
+    llm_model: str = "gemini-2.5-flash"
     llm_temperature: float = 0.3
     
     # 임베딩 모델 설정 (E5)
