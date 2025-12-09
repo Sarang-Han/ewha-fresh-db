@@ -220,11 +220,23 @@ def answer_schedule_question(
     # LLM 호출
     answer = _call_gemini_api(prompt)
     
-    # 출처는 고정
-    sources = [
-        "official/수강신청/25-2_course_registration.csv",
-        "official/학사일정/academic_calendar.csv",
+    # 출처는 고정 (CSV 파일은 문서 조각이 아닌 전체 데이터 사용)
+    source_docs = [
+        {
+            "title": "수강신청 일정표",
+            "content": "2025학년도 2학기 수강신청 일정 및 대상자 정보",
+            "url": "https://ewha.ac.kr/ewha/bachelor/course01.do",
+            "category": "학사안내 > 수강",
+            "relevance_score": None
+        },
+        {
+            "title": "학사일정",
+            "content": "2025학년도 학사 일정 (개강, 종강, 등록, 채플, 공휴일 등)",
+            "url": "https://ewha.ac.kr/ewha/schedule.do",
+            "category": "학사안내 > 학사일정",
+            "relevance_score": None
+        }
     ]
     
     logger.info("SCHEDULE 파이프라인 완료")
-    return answer, sources
+    return answer, source_docs

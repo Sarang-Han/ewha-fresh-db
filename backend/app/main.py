@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 
-from app.models import ChatRequest, ChatResponse, HealthResponse
+from app.models import ChatRequest, ChatResponse, HealthResponse, SourceDocument
 from app.intent_router import classify_intent, Intent
 from app.csv_loader import initialize_csv_texts, get_csv_texts
 from app.schedule_pipeline import answer_schedule_question
@@ -129,19 +129,22 @@ async def ask_question(request: ChatRequest):
             answer = """음... 이 부분은 버디가 가진 자료에서 찾기 어려운 내용이야 🥲
 
 혹시 더 정확한 정보가 필요하다면 아래를 참고해봐!
-- 📞 학적팀: 02-3277-2114
-- 🌐 이화 포탈: https://portal.ewha.ac.kr
-- 📋 학사안내: https://ewha.ac.kr/ewha/bachelor.do
+• 📞 학적팀: 02-3277-2114
+• 🌐 이화 포탈: https://portal.ewha.ac.kr
+• 📋 학사안내: https://ewha.ac.kr/ewha/bachelor.do
 
 그래도 학사 관련 질문이 있으면 다시 물어봐! 내가 아는 범위에서 최대한 도와줄게 💚"""
             sources = []
         
-        logger.info(f"답변 생성 완료 (Intent: {intent.value}, 출처: {len(sources)}개)")
+        # sources를 SourceDocument 모델로 변환
+        source_documents = [SourceDocument(**src) if isinstance(src, dict) else src for src in sources]
+        
+        logger.info(f"답변 생성 완료 (Intent: {intent.value}, 출처: {len(source_documents)}개)")
         
         return ChatResponse(
             session_id=request.session_id,
             answer=answer,
-            sources=sources
+            sources=source_documents
         )
         
     except Exception as e:

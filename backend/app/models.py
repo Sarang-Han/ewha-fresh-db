@@ -10,11 +10,20 @@ class ChatRequest(BaseModel):
     user_major: Optional[str] = Field(None, description="전공 정보")
 
 
+class SourceDocument(BaseModel):
+    """참조 문서 모델"""
+    title: str = Field(..., description="문서 제목")
+    content: str = Field(..., description="참조된 문서 조각 (chunk)")
+    url: str = Field(..., description="원본 문서 URL")
+    category: Optional[str] = Field(None, description="문서 카테고리 (학사안내 > 전공선택)")
+    relevance_score: Optional[float] = Field(None, description="관련성 점수 (0~1)")
+
+
 class ChatResponse(BaseModel):
     """채팅 응답 모델"""
     session_id: str
     answer: str
-    sources: List[str] = Field(default_factory=list, description="참고한 문서 출처")
+    sources: List[SourceDocument] = Field(default_factory=list, description="참고한 문서 조각들 (최대 5개)")
 
 
 class HealthResponse(BaseModel):

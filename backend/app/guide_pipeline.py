@@ -358,16 +358,28 @@ class GuideEngine:
         # LLM 호출
         answer = self._call_gemini_api(prompt)
         
-        # 출처 추출
-        sources = []
-        for doc in retrieved_docs:
-            if hasattr(doc, "metadata") and "source" in doc.metadata:
-                source = doc.metadata["source"]
-                if source not in sources:
-                    sources.append(source)
+        # 출처 문서 정보 추출 (상위 5개)
+        source_docs = []
+        seen_urls = set()  # 중복 URL 방지
         
-        logger.info("GUIDE 파이프라인 완료")
-        return answer, sources
+        for doc in retrieved_docs[:5]:  # 상위 5개만
+            metadata = doc.metadata if hasattr(doc, "metadata") else {}
+            url = metadata.get("source", "")
+            
+            # URL 중복 체크
+            if url and url not in seen_urls:
+                source_doc = {
+                    "title": metadata.get("title", "학사안내 문서"),
+                    "content": doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content,  # 300자로 제한
+                    "url": url,
+                    "category": metadata.get("category_path", None),
+                    "relevance_score": None  # BM25+Vector 점수는 별도 계산 필요
+                }
+                source_docs.append(source_doc)
+                seen_urls.add(url)
+        
+        logger.info(f"GUIDE 파이프라인 완료 (참조 문서 {len(source_docs)}개)")
+        return answer, source_docs
 
 
 # 전역 GUIDE 엔진 인스턴스
