@@ -145,7 +145,7 @@ SCHEDULE_PROMPT_TEMPLATE = """당신은 이화여자대학교 학사 안내 챗�
 # Fallback 모델 체인 (순서대로 시도)
 MODEL_CHAIN = [
     "gemini-2.5-flash",
-    "gemini-1.5-flash",
+    "gemini-2.0-flash",
 ]
 
 # API 실패 시 기본 안내 메시지
