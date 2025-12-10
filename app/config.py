@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # RAG 설정
     chunk_size: int = Field(default=800)
     chunk_overlap: int = Field(default=150)
-    top_k_results: int = Field(default=10)  # 검색 문서 수 증가
+    top_k_results: int = Field(default=5)  # 검색 문서 수
     
     # CSV 처리 설정
     csv_chunk_rows: int = Field(default=50)  # CSV를 몇 행씩 묶어서 처리할지

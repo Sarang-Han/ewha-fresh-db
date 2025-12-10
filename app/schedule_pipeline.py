@@ -161,6 +161,12 @@ def _call_gemini_api(prompt: str) -> str:
             json=data,
             timeout=60
         )
+        
+        # 에러 시 상세 로그
+        if response.status_code != 200:
+            logger.error(f"Gemini API 응답 코드: {response.status_code}")
+            logger.error(f"Gemini API 응답 내용: {response.text[:500]}")
+        
         response.raise_for_status()
         result = response.json()
         

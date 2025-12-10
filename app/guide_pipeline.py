@@ -262,6 +262,12 @@ class GuideEngine:
                 json=data,
                 timeout=30
             )
+            
+            # 에러 시 상세 로그
+            if response.status_code != 200:
+                logger.error(f"Gemini API 응답 코드: {response.status_code}")
+                logger.error(f"Gemini API 응답 내용: {response.text[:500]}")
+            
             response.raise_for_status()
             result = response.json()
             
@@ -318,7 +324,7 @@ class GuideEngine:
         context_texts = []
         for i, doc in enumerate(retrieved_docs, 1):
             source = doc.metadata.get("source", "Unknown")
-            content = doc.page_content[:1500] + "..." if len(doc.page_content) > 1500 else doc.page_content
+            content = doc.page_content[:1000] + "..." if len(doc.page_content) > 1000 else doc.page_content
             context_texts.append(f"[문서{i}] (출처: {source})\n{content}")
         
         context = "\n\n---\n\n".join(context_texts)
