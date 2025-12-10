@@ -1,0 +1,66 @@
+name: Sync to Hugging Face Spaces
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      # 배포에 필요한 파일만 감지
+      - 'app/**'
+      - 'data/**'
+      - 'chroma_db/**'
+      - 'Dockerfile'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'README.md'
+
+  # 수동 실행 가능
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      - name: Setup Git LFS
+        run: |
+          git lfs install
+
+      - name: Push to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          # Hugging Face 리모트 추가
+          git remote add hf https://oauth2:${HF_TOKEN}@huggingface.co/spaces/astralfinance/buddybot
+          
+          # 배포에 필요한 파일만 포함하는 임시 브랜치 생성
+          git checkout -b hf-deploy
+          
+          # 불필요한 파일 제거 (git에서만, 로컬 파일은 유지)
+          git rm -rf --cached scripts/ 2>/dev/null || true
+          git rm -rf --cached models/ 2>/dev/null || true
+          git rm -rf --cached .venv/ 2>/dev/null || true
+          git rm --cached .env 2>/dev/null || true
+          git rm --cached docker-compose.yml 2>/dev/null || true
+          git rm --cached pyproject.toml.dev 2>/dev/null || true
+          git rm --cached run_dev.sh 2>/dev/null || true
+          git rm --cached RAG.md 2>/dev/null || true
+          git rm --cached .DS_Store 2>/dev/null || true
+          git rm --cached "data/.DS_Store" 2>/dev/null || true
+          git rm --cached "data/official/.DS_Store" 2>/dev/null || true
+          
+          # 변경사항 커밋
+          git commit -m "Prepare for HF deployment" --allow-empty
+          
+          # Hugging Face로 강제 푸시
+          git push hf hf-deploy:main --force
