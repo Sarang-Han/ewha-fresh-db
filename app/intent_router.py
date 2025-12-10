@@ -70,6 +70,13 @@ GUIDE_KEYWORDS = [
     "학점이월", "초과학점", "수업연한", "인문학 교양", "소프트웨어 교과목", "SW교과목",
 ]
 
+# Fallback 모델 체인 (순서대로 시도)
+MODEL_CHAIN = [
+    "gemini-2.5-flash",
+    "gemini-1.5-flash",
+]
+
+
 # LLM 라우터 프롬프트 템플릿
 ROUTER_PROMPT_TEMPLATE = """[시스템 역할]
 당신은 이화여자대학교 학사 챗봇의 질문 분류기입니다.
@@ -107,38 +114,54 @@ ROUTER_PROMPT_TEMPLATE = """[시스템 역할]
 
 
 def _call_gemini_for_classification(prompt: str) -> str:
-    """Gemini API 호출하여 분류 결과 반환"""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.llm_model}:generateContent"
-    headers = {"Content-Type": "application/json"}
-    data = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": 0.1,  # 분류는 낮은 temperature
-            "maxOutputTokens": 20,
-        }
-    }
+    """Gemini API 호출하여 분류 결과 반환 (Fallback 체인 적용)"""
+    import time
     
-    try:
-        response = requests.post(
-            f"{url}?key={settings.google_api_key}",
-            headers=headers,
-            json=data,
-            timeout=10
-        )
-        response.raise_for_status()
-        result = response.json()
+    for model in MODEL_CHAIN:
+        for attempt in range(2):  # 각 모델당 2번 재시도
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                headers = {"Content-Type": "application/json"}
+                data = {
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0.1,  # 분류는 낮은 temperature
+                        "maxOutputTokens": 20,
+                    }
+                }
+                
+                response = requests.post(
+                    f"{url}?key={settings.google_api_key}",
+                    headers=headers,
+                    json=data,
+                    timeout=10
+                )
+                
+                if response.status_code != 200:
+                    logger.warning(f"[{model}] Intent 분류 API 응답 코드: {response.status_code}")
+                    raise requests.exceptions.HTTPError(f"{response.status_code}")
+                
+                result = response.json()
+                
+                if "candidates" in result and len(result["candidates"]) > 0:
+                    candidate = result["candidates"][0]
+                    if "content" in candidate and "parts" in candidate["content"]:
+                        text = candidate["content"]["parts"][0]["text"].strip().upper()
+                        logger.info(f"[{model}] Intent 분류 성공")
+                        return text
+                
+                return "OTHER"
+                
+            except Exception as e:
+                logger.warning(f"[{model}] Intent 분류 시도 {attempt + 1} 실패: {str(e)[:50]}")
+                if attempt < 1:
+                    time.sleep(0.5 * (attempt + 1))
         
-        if "candidates" in result and len(result["candidates"]) > 0:
-            candidate = result["candidates"][0]
-            if "content" in candidate and "parts" in candidate["content"]:
-                text = candidate["content"]["parts"][0]["text"].strip().upper()
-                return text
-        
-        return "OTHER"
-        
-    except Exception as e:
-        logger.error(f"Intent 분류 API 호출 실패: {str(e)}")
-        return "OTHER"
+        logger.warning(f"[{model}] 모든 재시도 실패, 다음 모델로 전환")
+    
+    # 모든 모델 실패 시 OTHER 반환 (가장 안전한 기본값)
+    logger.error("Intent 분류 API 모든 모델 실패, OTHER로 fallback")
+    return "OTHER"
 
 
 def classify_intent(

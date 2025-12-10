@@ -142,9 +142,25 @@ SCHEDULE_PROMPT_TEMPLATE = """당신은 이화여자대학교 학사 안내 챗�
 이제 위 규칙에 따라 답변을 작성해 주세요."""
 
 
-def _call_gemini_api(prompt: str) -> str:
-    """Gemini API 직접 호출"""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.llm_model}:generateContent"
+# Fallback 모델 체인 (순서대로 시도)
+MODEL_CHAIN = [
+    "gemini-2.5-flash",
+    "gemini-1.5-flash",
+]
+
+# API 실패 시 기본 안내 메시지
+FALLBACK_MESSAGE = """😥 지금 서버가 조금 바빠서 답변을 생성하기 어려워요.
+
+잠시 후 다시 시도해주거나, 아래 링크에서 직접 확인해봐!
+
+📌 **수강신청 일정**: [이화 포탈](https://portal.ewha.ac.kr) > 학사행정 > 수강신청
+📌 **학사일정**: [학사일정 페이지](https://ewha.ac.kr/ewha/schedule.do)
+📌 **학적팀 연락처**: 02-3277-2114"""
+
+
+def _call_gemini_api_with_model(prompt: str, model: str, timeout: int = 60) -> str:
+    """특정 모델로 Gemini API 호출"""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     headers = {"Content-Type": "application/json"}
     data = {
         "contents": [{"parts": [{"text": prompt}]}],
@@ -154,36 +170,52 @@ def _call_gemini_api(prompt: str) -> str:
         }
     }
     
-    try:
-        response = requests.post(
-            f"{url}?key={settings.google_api_key}",
-            headers=headers,
-            json=data,
-            timeout=60
-        )
+    response = requests.post(
+        f"{url}?key={settings.google_api_key}",
+        headers=headers,
+        json=data,
+        timeout=timeout
+    )
+    
+    if response.status_code != 200:
+        logger.warning(f"[{model}] API 응답 코드: {response.status_code}")
+        raise requests.exceptions.HTTPError(f"{response.status_code}: {response.text[:200]}")
+    
+    result = response.json()
+    
+    if "candidates" in result and len(result["candidates"]) > 0:
+        candidate = result["candidates"][0]
+        if "content" in candidate and "parts" in candidate["content"]:
+            return candidate["content"]["parts"][0]["text"]
+    
+    raise ValueError(f"API 응답 파싱 실패")
+
+
+def _call_gemini_api(prompt: str) -> str:
+    """Gemini API 호출 (Fallback 체인 적용)"""
+    import time
+    
+    last_error = None
+    
+    for model in MODEL_CHAIN:
+        # 각 모델당 최대 2번 재시도 (exponential backoff)
+        for attempt in range(2):
+            try:
+                logger.info(f"[{model}] 시도 {attempt + 1}/2")
+                result = _call_gemini_api_with_model(prompt, model)
+                logger.info(f"[{model}] 성공")
+                return result
+            except Exception as e:
+                last_error = e
+                logger.warning(f"[{model}] 시도 {attempt + 1} 실패: {str(e)[:100]}")
+                if attempt < 1:  # 마지막 시도가 아니면 대기
+                    time.sleep(1 * (attempt + 1))  # 1초, 2초 대기
         
-        # 에러 시 상세 로그
-        if response.status_code != 200:
-            logger.error(f"Gemini API 응답 코드: {response.status_code}")
-            logger.error(f"Gemini API 응답 내용: {response.text[:500]}")
-        
-        response.raise_for_status()
-        result = response.json()
-        
-        if "candidates" in result and len(result["candidates"]) > 0:
-            candidate = result["candidates"][0]
-            if "content" in candidate and "parts" in candidate["content"]:
-                return candidate["content"]["parts"][0]["text"]
-        
-        logger.error(f"예상치 못한 API 응답 구조: {result}")
-        raise ValueError(f"Gemini API 응답 파싱 실패")
-        
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Gemini API 호출 실패: {str(e)}")
-        raise
-    except Exception as e:
-        logger.error(f"SCHEDULE 파이프라인 오류: {str(e)}")
-        raise
+        logger.warning(f"[{model}] 모든 재시도 실패, 다음 모델로 전환")
+    
+    # 모든 모델 실패 시
+    logger.error(f"모든 모델 호출 실패. 마지막 에러: {last_error}")
+    return None  # None 반환하여 fallback 메시지 사용
 
 
 def answer_schedule_question(
@@ -223,8 +255,11 @@ def answer_schedule_question(
         academic_calendar_csv=academic_calendar_csv,
     )
     
-    # LLM 호출
+    # LLM 호출 (실패 시 fallback 메시지)
     answer = _call_gemini_api(prompt)
+    if answer is None:
+        answer = FALLBACK_MESSAGE
+        logger.warning("SCHEDULE 파이프라인: fallback 메시지 사용")
     
     # 출처는 고정 (CSV 파일은 문서 조각이 아닌 전체 데이터 사용)
     source_docs = [

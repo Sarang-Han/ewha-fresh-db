@@ -20,6 +20,21 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
+# Fallback 모델 체인 (순서대로 시도)
+MODEL_CHAIN = [
+    "gemini-2.5-flash",
+    "gemini-1.5-flash",
+]
+
+# API 실패 시 기본 안내 메시지
+GUIDE_FALLBACK_MESSAGE = """😥 지금 서버가 조금 바빠서 답변을 생성하기 어려워요.
+
+잠시 후 다시 시도해주거나, 아래 링크에서 직접 확인해봐!
+
+📌 **학사안내**: [이화 포탈](https://portal.ewha.ac.kr)
+📌 **학적팀 연락처**: 02-3277-2114"""
+
+
 # =============================================================================
 # 프롬프트 템플릿
 # =============================================================================
@@ -244,43 +259,56 @@ class GuideEngine:
             raise
     
     def _call_gemini_api(self, prompt: str) -> str:
-        """Gemini API 호출"""
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.llm_model}:generateContent"
+        """Gemini API 호출 (Fallback 체인 적용)"""
+        import time
         
-        data = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": settings.llm_temperature,
-                "maxOutputTokens": 8192,
-            }
-        }
+        last_error = None
         
-        try:
-            response = requests.post(
-                f"{url}?key={settings.google_api_key}",
-                headers={"Content-Type": "application/json"},
-                json=data,
-                timeout=30
-            )
+        for model in MODEL_CHAIN:
+            for attempt in range(2):  # 각 모델당 2번 재시도
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                    
+                    data = {
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "temperature": settings.llm_temperature,
+                            "maxOutputTokens": 8192,
+                        }
+                    }
+                    
+                    response = requests.post(
+                        f"{url}?key={settings.google_api_key}",
+                        headers={"Content-Type": "application/json"},
+                        json=data,
+                        timeout=30
+                    )
+                    
+                    if response.status_code != 200:
+                        logger.warning(f"[{model}] GUIDE API 응답 코드: {response.status_code}")
+                        raise requests.exceptions.HTTPError(f"{response.status_code}: {response.text[:200]}")
+                    
+                    result = response.json()
+                    
+                    if "candidates" in result and result["candidates"]:
+                        candidate = result["candidates"][0]
+                        if "content" in candidate and "parts" in candidate["content"]:
+                            logger.info(f"[{model}] GUIDE API 성공")
+                            return candidate["content"]["parts"][0]["text"]
+                    
+                    raise ValueError("API 응답 파싱 실패")
+                    
+                except Exception as e:
+                    last_error = e
+                    logger.warning(f"[{model}] GUIDE 시도 {attempt + 1} 실패: {str(e)[:100]}")
+                    if attempt < 1:
+                        time.sleep(1 * (attempt + 1))
             
-            # 에러 시 상세 로그
-            if response.status_code != 200:
-                logger.error(f"Gemini API 응답 코드: {response.status_code}")
-                logger.error(f"Gemini API 응답 내용: {response.text[:500]}")
-            
-            response.raise_for_status()
-            result = response.json()
-            
-            if "candidates" in result and result["candidates"]:
-                candidate = result["candidates"][0]
-                if "content" in candidate and "parts" in candidate["content"]:
-                    return candidate["content"]["parts"][0]["text"]
-            
-            raise ValueError("Gemini API 응답 파싱 실패")
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Gemini API 호출 실패: {str(e)}")
-            raise
+            logger.warning(f"[{model}] 모든 재시도 실패, 다음 모델로 전환")
+        
+        # 모든 모델 실패
+        logger.error(f"GUIDE API 모든 모델 호출 실패. 마지막 에러: {last_error}")
+        return None  # None 반환하여 fallback 메시지 사용
     
     def get_answer(
         self,
@@ -329,7 +357,7 @@ class GuideEngine:
         
         context = "\n\n---\n\n".join(context_texts)
         
-        # LLM 호출
+        # LLM 호출 (실패 시 fallback 메시지)
         prompt = GUIDE_PROMPT_TEMPLATE.format(
             user_grade=user_grade or "미지정",
             user_major=user_major or "미지정",
@@ -337,6 +365,9 @@ class GuideEngine:
             context=context
         )
         answer = self._call_gemini_api(prompt)
+        if answer is None:
+            answer = GUIDE_FALLBACK_MESSAGE
+            logger.warning("GUIDE 파이프라인: fallback 메시지 사용")
         
         # 출처 문서 구성 (중복 제거)
         source_docs = []
