@@ -1,0 +1,56 @@
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables (민감정보)
+.env
+
+# Models (더 이상 사용하지 않음)
+models/
+*.bin
+*.safetensors
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Git
+.git/
+.gitignore
+
+# Development files
+*.md
+!README.md
+pyproject.toml.dev
+run_dev.sh
+render.yaml
+
+# Scripts (배포 환경에서 불필요)
+scripts/
+
+# uv
+.uv/

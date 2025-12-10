@@ -1,7 +1,0 @@
-# Docker
-.dockerignore
-
-# Python
-__pycache__
-*.pyc
-.pytest_cache

@@ -33,18 +33,22 @@ data/official/
 
 ### 파일 구성
 ```
-backend/app/
+app/
 ├── main.py              # FastAPI 서버, /ask 엔드포인트
 ├── models.py            # Request/Response Pydantic 모델
 ├── config.py            # 환경변수 설정
 ├── intent_router.py     # Intent 분류기 (SCHEDULE/GUIDE/OTHER)
 ├── csv_loader.py        # CSV 텍스트 로더 (전역 싱글톤)
 ├── schedule_pipeline.py # SCHEDULE 파이프라인 (CSV + LLM)
-├── guide_pipeline.py    # GUIDE 파이프라인 (Markdown RAG + LLM)
-└── rag_engine.py        # (레거시) 기존 통합 RAG 엔진
+└── guide_pipeline.py    # GUIDE 파이프라인 (Markdown RAG + LLM)
 
-backend/scripts/
+scripts/
 └── embed_data.py        # Markdown 임베딩 스크립트 (CSV 제외)
+
+data/official/
+├── 학사안내/            # Markdown 문서
+├── 수강신청/            # CSV 일정 데이터
+└── 학사일정/            # CSV 일정 데이터
 ```
 
 ---

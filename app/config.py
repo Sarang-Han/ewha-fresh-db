@@ -17,17 +17,17 @@ class Settings(BaseSettings):
     api_port: int = 8000
     
     # LLM 설정
-    llm_model: str = "gemini-2.5-flash"
+    llm_model: str = "gemini-2.5-pro"
     llm_temperature: float = 0.3
     
     # 임베딩 모델 설정 (E5)
     embedding_model: str = Field(default="intfloat/multilingual-e5-large-instruct")
-    embedding_device: str = Field(default="cpu")  # "cuda" for GPU
+    embedding_device: str = Field(default="cpu")
     
     # RAG 설정
     chunk_size: int = Field(default=800)
     chunk_overlap: int = Field(default=150)
-    top_k_results: int = Field(default=8)
+    top_k_results: int = Field(default=10)  # 검색 문서 수 증가
     
     # CSV 처리 설정
     csv_chunk_rows: int = Field(default=50)  # CSV를 몇 행씩 묶어서 처리할지

@@ -1,6 +1,6 @@
 services:
   backend:
-    build: ./backend
+    build: .
     container_name: ewha-chatbot-backend
     ports:
       - "8000:8000"
@@ -9,10 +9,10 @@ services:
       - CHROMA_PERSIST_DIR=/app/chroma_db
       - API_HOST=0.0.0.0
       - API_PORT=8000
-      - LLM_MODEL=gemini-2.5-pro
+      - LLM_MODEL=gemini-2.5-flash
     volumes:
-      - ./backend/chroma_db:/app/chroma_db
-      - ./backend/app:/app/app
+      - ./chroma_db:/app/chroma_db
+      - ./app:/app/app
       - ./data:/app/data
     restart: unless-stopped
     networks:

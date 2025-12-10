@@ -23,7 +23,7 @@ def load_csv_texts() -> Dict[str, str]:
         }
     """
     # 프로젝트 루트 기준 데이터 디렉터리
-    project_root = Path(__file__).parent.parent.parent
+    project_root = Path(__file__).parent.parent
     base_dir = project_root / "data" / "official"
     
     csv_texts = {}
