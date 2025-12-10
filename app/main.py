@@ -129,11 +129,10 @@ async def ask_question(request: ChatRequest):
             answer = """음... 이 부분은 버디가 가진 자료에서 찾기 어려운 내용이야 🥲
 
 혹시 더 정확한 정보가 필요하다면 아래를 참고해봐!
-• 📞 학적팀: 02-3277-2114
-• 🌐 이화 포탈: https://portal.ewha.ac.kr
-• 📋 학사안내: https://ewha.ac.kr/ewha/bachelor.do
-
-그래도 학사 관련 질문이 있으면 다시 물어봐! 내가 아는 범위에서 최대한 도와줄게 💚"""
+    • 📞 학적팀: 02-3277-2114
+    • 📋 학사안내: https://ewha.ac.kr/ewha/bachelor/enrollment01.do
+버디가 간혹 단어를 제대로 인식하지 못하는 경우가 있으니, 다른 말로 다시 물어봐!
+아는 범위에서 최대한 도와줄게 💚"""
             sources = []
         
         # sources를 SourceDocument 모델로 변환
