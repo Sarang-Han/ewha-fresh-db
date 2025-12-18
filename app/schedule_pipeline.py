@@ -153,9 +153,9 @@ FALLBACK_MESSAGE = """😥 지금 서버가 조금 바빠서 답변을 생성하
 
 잠시 후 다시 시도해주거나, 아래 링크에서 직접 확인해봐!
 
-📌 **수강신청 일정**: [이화 포탈](https://portal.ewha.ac.kr) > 학사행정 > 수강신청
-📌 **학사일정**: [학사일정 페이지](https://ewha.ac.kr/ewha/schedule.do)
-📌 **학적팀 연락처**: 02-3277-2114"""
+- 📌 **학적팀 연락처**: 02-3277-2030, 2033
+- 📌 **공지사항**: [공지사항 페이지](https://www.ewha.ac.kr/ewha/news/notice.do)
+"""
 
 
 def _call_gemini_api_with_model(prompt: str, model: str, timeout: int = 60) -> str:
