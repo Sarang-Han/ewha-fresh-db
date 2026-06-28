@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Fallback 모델 체인 (순서대로 시도)
 MODEL_CHAIN = [
     "gemini-2.5-flash",
-    "gemini-2.0-flash",
+    "gemini-2.5-flash-lite",
 ]
 
 # API 실패 시 기본 안내 메시지
