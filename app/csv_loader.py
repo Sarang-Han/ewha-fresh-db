@@ -41,17 +41,41 @@ def load_csv_texts() -> Dict[str, str]:
         logger.error(f"수강신청 CSV 로드 실패: {str(e)}")
         csv_texts["course_registration"] = ""
     
-    # 학사일정 CSV
-    calendar_path = base_dir / "학사일정" / "academic_calendar.csv"
-    try:
-        with open(calendar_path, encoding="utf-8") as f:
-            csv_texts["academic_calendar"] = f.read()
-        logger.info(f"학사일정 CSV 로드 완료: {calendar_path}")
-    except FileNotFoundError:
-        logger.error(f"학사일정 CSV 파일을 찾을 수 없습니다: {calendar_path}")
-        csv_texts["academic_calendar"] = ""
-    except Exception as e:
-        logger.error(f"학사일정 CSV 로드 실패: {str(e)}")
+    # 학사일정 CSV (academic_calendar_*.csv 패턴의 모든 파일을 찾아 합침)
+    calendar_dir = base_dir / "학사일정"
+    calendar_files = sorted(list(calendar_dir.glob("academic_calendar_*.csv")))
+    
+    if not calendar_files:
+        # Fallback to the old default name
+        fallback_path = calendar_dir / "academic_calendar.csv"
+        if fallback_path.exists():
+            calendar_files = [fallback_path]
+            
+    combined_calendar_lines = []
+    header_saved = False
+    
+    for c_file in calendar_files:
+        try:
+            with open(c_file, encoding="utf-8") as f:
+                content = f.read().strip()
+                if not content:
+                    continue
+                lines = content.splitlines()
+                if not lines:
+                    continue
+                if not header_saved:
+                    combined_calendar_lines.append(lines[0])  # Header
+                    header_saved = True
+                # Append data lines (excluding header)
+                combined_calendar_lines.extend(lines[1:])
+            logger.info(f"학사일정 CSV 로드 완료: {c_file}")
+        except Exception as e:
+            logger.error(f"학사일정 CSV 로드 실패 ({c_file}): {str(e)}")
+            
+    if combined_calendar_lines:
+        csv_texts["academic_calendar"] = "\n".join(combined_calendar_lines)
+    else:
+        logger.error("학사일정 CSV 파일을 찾을 수 없습니다.")
         csv_texts["academic_calendar"] = ""
     
     return csv_texts

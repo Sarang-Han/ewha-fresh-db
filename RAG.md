@@ -23,7 +23,9 @@ data/official/
 ├── 수강신청/              # CSV (SCHEDULE 파이프라인에서 직접 사용)
 │   └── 25-2_course_registration.csv
 ├── 학사일정/              # CSV (SCHEDULE 파이프라인에서 직접 사용)
-│   └── academic_calendar.csv
+│   ├── academic_calendar_2025.csv
+│   ├── academic_calendar_2026.csv
+│   └── calendar_schema.md
 └── etc/
 ```
 
@@ -113,7 +115,7 @@ ROUTER_PROMPT_TEMPLATE = """[시스템 역할]
 ```python
 CSV_TEXTS = {
     "course_registration": "25-2_course_registration.csv 전체 텍스트",
-    "academic_calendar": "academic_calendar.csv 전체 텍스트"
+    "academic_calendar": "academic_calendar_*.csv 병합된 전체 텍스트"
 }
 ```
 
@@ -182,7 +184,7 @@ CSV_TEXTS = {
 ```python
 sources = [
     "official/수강신청/25-2_course_registration.csv",
-    "official/학사일정/academic_calendar.csv",
+    "official/학사일정/academic_calendar_*.csv",
 ]
 ```
 - SCHEDULE은 항상 고정 출처 반환

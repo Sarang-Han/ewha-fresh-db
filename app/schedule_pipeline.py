@@ -272,7 +272,7 @@ def answer_schedule_question(
         },
         {
             "title": "학사일정",
-            "content": "2025학년도 학사 일정 (개강, 종강, 등록, 채플, 공휴일 등)",
+            "content": "학사 일정 (개강, 종강, 등록, 채플, 공휴일 등)",
             "url": "https://ewha.ac.kr/ewha/schedule.do",
             "category": "학사안내 > 학사일정",
             "relevance_score": None
