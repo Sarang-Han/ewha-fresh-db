@@ -20,7 +20,7 @@ RAG 기반 학사 안내 챗봇 백엔드 API
 - **벡터 DB**: ChromaDB
 - **RAG**: LangChain
 - **LLM**: Google Gemini 2.5 Flash
-- **임베딩**: Google text-embedding-004
+- **임베딩**: intfloat/multilingual-e5-large-instruct
 - **패키지 관리**: uv
 
 ## 프로젝트 구조
