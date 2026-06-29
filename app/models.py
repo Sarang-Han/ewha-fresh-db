@@ -30,3 +30,17 @@ class HealthResponse(BaseModel):
     """헬스체크 응답 모델"""
     status: str
     message: str
+
+
+class CalendarEventResponse(BaseModel):
+    """학사일정 개별 이벤트 모델"""
+    academic_year: int = Field(..., description="학년도")
+    start_date: str = Field(..., description="시작일 (YYYY-MM-DD)")
+    end_date: str = Field(..., description="종료일 (YYYY-MM-DD)")
+    semester: str = Field(..., description="학기 (1, 2, summer, winter)")
+    event_type: str = Field(..., description="이벤트 타입")
+    title_raw: str = Field(..., description="일정명")
+    target: str = Field(..., description="대상")
+    is_holiday: bool = Field(..., description="공휴일 여부")
+    notes: Optional[str] = Field(None, description="비고")
+
