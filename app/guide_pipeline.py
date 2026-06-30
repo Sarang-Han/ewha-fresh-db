@@ -279,6 +279,7 @@ class GuideEngine:
         Returns:
             (answer_text, source_docs) 튜플
         """
+        self.ensure_initialized()  # Lazy Loading 지연 초기화 보장
         logger.info(f"GUIDE 파이프라인 시작: {message[:50]}...")
         
         # 컨텍스트 쿼리 구성
