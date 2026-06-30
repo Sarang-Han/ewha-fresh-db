@@ -5,9 +5,9 @@ Intent Router 모듈
 from enum import Enum
 from typing import Optional
 import logging
-import requests
 
 from app.config import settings
+from app.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
@@ -237,7 +237,8 @@ def classify_intent(
         message=message
     )
     
-    llm_result = _call_gemini_for_classification(prompt)
+    llm_service = LLMService(temperature=0.1)
+    llm_result = llm_service.call_gemini(prompt, max_tokens=20) or "OTHER"
     
     # 결과 파싱 (SCHEDULE, GUIDE, OTHER 중 하나만 추출)
     if "SCHEDULE" in llm_result:

@@ -5,9 +5,9 @@ SCHEDULE 파이프라인 모듈
 from typing import Tuple, List, Optional
 from datetime import datetime
 import logging
-import requests
 
 from app.config import settings
+from app.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
@@ -142,12 +142,6 @@ SCHEDULE_PROMPT_TEMPLATE = """당신은 이화여자대학교 학사 안내 챗�
 이제 위 규칙에 따라 답변을 작성해 주세요."""
 
 
-# Fallback 모델 체인 (순서대로 시도)
-MODEL_CHAIN = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-]
-
 # API 실패 시 기본 안내 메시지
 FALLBACK_MESSAGE = """😥 지금 서버가 조금 바빠서 답변을 생성하기 어려워요.
 
@@ -158,64 +152,10 @@ FALLBACK_MESSAGE = """😥 지금 서버가 조금 바빠서 답변을 생성하
 """
 
 
-def _call_gemini_api_with_model(prompt: str, model: str, timeout: int = 60) -> str:
-    """특정 모델로 Gemini API 호출"""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    headers = {"Content-Type": "application/json"}
-    data = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": settings.llm_temperature,
-            "maxOutputTokens": 8192,
-        }
-    }
-    
-    response = requests.post(
-        f"{url}?key={settings.google_api_key}",
-        headers=headers,
-        json=data,
-        timeout=timeout
-    )
-    
-    if response.status_code != 200:
-        logger.warning(f"[{model}] API 응답 코드: {response.status_code}")
-        raise requests.exceptions.HTTPError(f"{response.status_code}: {response.text[:200]}")
-    
-    result = response.json()
-    
-    if "candidates" in result and len(result["candidates"]) > 0:
-        candidate = result["candidates"][0]
-        if "content" in candidate and "parts" in candidate["content"]:
-            return candidate["content"]["parts"][0]["text"]
-    
-    raise ValueError(f"API 응답 파싱 실패")
-
-
-def _call_gemini_api(prompt: str) -> str:
-    """Gemini API 호출 (Fallback 체인 적용)"""
-    import time
-    
-    last_error = None
-    
-    for model in MODEL_CHAIN:
-        # 각 모델당 최대 2번 재시도 (exponential backoff)
-        for attempt in range(2):
-            try:
-                logger.info(f"[{model}] 시도 {attempt + 1}/2")
-                result = _call_gemini_api_with_model(prompt, model)
-                logger.info(f"[{model}] 성공")
-                return result
-            except Exception as e:
-                last_error = e
-                logger.warning(f"[{model}] 시도 {attempt + 1} 실패: {str(e)[:100]}")
-                if attempt < 1:  # 마지막 시도가 아니면 대기
-                    time.sleep(1 * (attempt + 1))  # 1초, 2초 대기
-        
-        logger.warning(f"[{model}] 모든 재시도 실패, 다음 모델로 전환")
-    
-    # 모든 모델 실패 시
-    logger.error(f"모든 모델 호출 실패. 마지막 에러: {last_error}")
-    return None  # None 반환하여 fallback 메시지 사용
+def _call_gemini_api(prompt: str) -> Optional[str]:
+    """Gemini API 호출 (LLMService 공통 활용)"""
+    llm_service = LLMService(temperature=settings.llm_temperature)
+    return llm_service.call_gemini(prompt)
 
 
 def answer_schedule_question(
@@ -281,3 +221,4 @@ def answer_schedule_question(
     
     logger.info("SCHEDULE 파이프라인 완료")
     return answer, source_docs
+

@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings
 from pydantic import Field
-from typing import Optional
+from typing import Optional, List
 
 
 class Settings(BaseSettings):
@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # LLM 설정
     llm_model: str = "gemini-2.5-flash"
     llm_temperature: float = 0.3
+    model_chain: List[str] = Field(default=["gemini-2.5-flash", "gemini-2.5-flash-lite"])
     
     # 임베딩 모델 설정 (E5)
     embedding_model: str = Field(default="intfloat/multilingual-e5-large-instruct")

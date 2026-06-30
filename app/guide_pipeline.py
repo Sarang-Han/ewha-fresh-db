@@ -13,18 +13,12 @@ from sentence_transformers import SentenceTransformer
 from langchain_core.embeddings import Embeddings
 from rank_bm25 import BM25Okapi
 import numpy as np
-import requests
 
 from app.config import settings
+from app.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
-
-# Fallback 모델 체인 (순서대로 시도)
-MODEL_CHAIN = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-]
 
 # API 실패 시 기본 안내 메시지
 GUIDE_FALLBACK_MESSAGE = """😥 지금 서버가 조금 바빠서 답변을 생성하기 어려워요.
@@ -209,8 +203,17 @@ class GuideEngine:
         self.embeddings: Optional[E5Embeddings] = None
         self.vectorstore: Optional[Chroma] = None
         self.hybrid_retriever: Optional[HybridRetriever] = None
-        self._initialize()
+        self.is_initialized = False
     
+    def ensure_initialized(self):
+        """필요한 시점에 무거운 리소스를 최초 1회 동적 로드합니다 (Lazy Initialization)"""
+        if self.is_initialized:
+            return
+        logger.info("=== GUIDE 엔진 지연 초기화(Lazy Initialization) 시작 ===")
+        self._initialize()
+        self.is_initialized = True
+        logger.info("=== GUIDE 엔진 지연 초기화 완료 ===")
+
     def _initialize(self):
         """엔진 초기화"""
         try:
@@ -259,57 +262,10 @@ class GuideEngine:
             logger.error(f"GUIDE 엔진 초기화 실패: {str(e)}")
             raise
     
-    def _call_gemini_api(self, prompt: str) -> str:
-        """Gemini API 호출 (Fallback 체인 적용)"""
-        import time
-        
-        last_error = None
-        
-        for model in MODEL_CHAIN:
-            for attempt in range(2):  # 각 모델당 2번 재시도
-                try:
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-                    
-                    data = {
-                        "contents": [{"parts": [{"text": prompt}]}],
-                        "generationConfig": {
-                            "temperature": settings.llm_temperature,
-                            "maxOutputTokens": 8192,
-                        }
-                    }
-                    
-                    response = requests.post(
-                        f"{url}?key={settings.google_api_key}",
-                        headers={"Content-Type": "application/json"},
-                        json=data,
-                        timeout=30
-                    )
-                    
-                    if response.status_code != 200:
-                        logger.warning(f"[{model}] GUIDE API 응답 코드: {response.status_code}")
-                        raise requests.exceptions.HTTPError(f"{response.status_code}: {response.text[:200]}")
-                    
-                    result = response.json()
-                    
-                    if "candidates" in result and result["candidates"]:
-                        candidate = result["candidates"][0]
-                        if "content" in candidate and "parts" in candidate["content"]:
-                            logger.info(f"[{model}] GUIDE API 성공")
-                            return candidate["content"]["parts"][0]["text"]
-                    
-                    raise ValueError("API 응답 파싱 실패")
-                    
-                except Exception as e:
-                    last_error = e
-                    logger.warning(f"[{model}] GUIDE 시도 {attempt + 1} 실패: {str(e)[:100]}")
-                    if attempt < 1:
-                        time.sleep(1 * (attempt + 1))
-            
-            logger.warning(f"[{model}] 모든 재시도 실패, 다음 모델로 전환")
-        
-        # 모든 모델 실패
-        logger.error(f"GUIDE API 모든 모델 호출 실패. 마지막 에러: {last_error}")
-        return None  # None 반환하여 fallback 메시지 사용
+    def _call_gemini_api(self, prompt: str) -> Optional[str]:
+        """Gemini API 호출 (LLMService 공통 활용)"""
+        llm_service = LLMService(temperature=settings.llm_temperature)
+        return llm_service.call_gemini(prompt)
     
     def get_answer(
         self,
