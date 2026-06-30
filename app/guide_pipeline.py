@@ -203,16 +203,7 @@ class GuideEngine:
         self.embeddings: Optional[E5Embeddings] = None
         self.vectorstore: Optional[Chroma] = None
         self.hybrid_retriever: Optional[HybridRetriever] = None
-        self.is_initialized = False
-    
-    def ensure_initialized(self):
-        """필요한 시점에 무거운 리소스를 최초 1회 동적 로드합니다 (Lazy Initialization)"""
-        if self.is_initialized:
-            return
-        logger.info("=== GUIDE 엔진 지연 초기화(Lazy Initialization) 시작 ===")
         self._initialize()
-        self.is_initialized = True
-        logger.info("=== GUIDE 엔진 지연 초기화 완료 ===")
 
     def _initialize(self):
         """엔진 초기화"""
@@ -279,7 +270,6 @@ class GuideEngine:
         Returns:
             (answer_text, source_docs) 튜플
         """
-        self.ensure_initialized()  # Lazy Loading 지연 초기화 보장
         logger.info(f"GUIDE 파이프라인 시작: {message[:50]}...")
         
         # 컨텍스트 쿼리 구성
