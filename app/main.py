@@ -2,16 +2,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
-import csv
-from io import StringIO
 from typing import List, Optional
-from datetime import datetime
 
 from app.models import ChatRequest, ChatResponse, HealthResponse, SourceDocument, CalendarEventResponse
 from app.intent_router import classify_intent, Intent
 from app.csv_loader import initialize_csv_texts, get_csv_texts
 from app.schedule_pipeline import answer_schedule_question
 from app.guide_pipeline import initialize_guide_engine, answer_guide_question
+from app.services.calendar_service import CalendarService
 from app.config import settings
 
 # 로깅 설정
@@ -174,53 +172,17 @@ async def get_academic_calendar(
         upcoming: True로 설정 시, 오늘 날짜(또는 현재 기준) 이후에 종료되는 일정만 반환합니다.
     """
     try:
-        # csv_loader에서 이미 병합 완료된 학사일정 CSV 텍스트 가져오기
-        csv_texts = get_csv_texts()
-        calendar_csv = csv_texts.get("academic_calendar", "")
-        
-        if not calendar_csv:
-            raise HTTPException(status_code=404, detail="학사일정 데이터를 찾을 수 없습니다.")
-        
-        # CSV 데이터 파싱
-        f = StringIO(calendar_csv.strip())
-        reader = csv.DictReader(f)
-        
-        events = []
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        
-        for row in reader:
-            # 1. 학년도 필터
-            if year and int(row["academic_year"]) != year:
-                continue
-                
-            # 2. 이벤트 타입 필터
-            if event_type and row["event_type"] != event_type:
-                continue
-                
-            # 3. 최근/다가오는 일정 필터 (오늘 날짜 기준 end_date가 지나지 않은 일정)
-            if upcoming and row["end_date"] < today_str:
-                continue
-                
-            events.append(CalendarEventResponse(
-                academic_year=int(row["academic_year"]),
-                start_date=row["start_date"],
-                end_date=row["end_date"],
-                semester=row["semester"],
-                event_type=row["event_type"],
-                title_raw=row["title_raw"],
-                target=row["target"],
-                is_holiday=row["is_holiday"] == "1" or row["is_holiday"].lower() == "true",
-                notes=row["notes"] if row.get("notes") else None
-            ))
-            
-        # 날짜 오름차순 정렬 (시작일 기준)
-        events.sort(key=lambda x: x.start_date)
-        
-        return events
-        
+        return CalendarService.get_filtered_events(
+            year=year,
+            event_type=event_type,
+            upcoming=upcoming
+        )
+    except ValueError as e:
+        logger.error(f"학사일정 데이터 없음: {str(e)}")
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.error(f"학사일정 데이터 파싱 실패: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"학사일정을 불러오는 중 오류가 발생했습니다: {str(e)}")
+        logger.error(f"학사일정 조회 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail="학사일정을 불러오는 중 오류가 발생했습니다.")
 
 
 if __name__ == "__main__":
