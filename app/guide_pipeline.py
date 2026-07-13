@@ -14,8 +14,10 @@ from langchain_core.embeddings import Embeddings
 from rank_bm25 import BM25Okapi
 import numpy as np
 
+from collections import OrderedDict
+
 from app.config import settings
-from app.services.llm_service import LLMService
+from app.services.llm_service import get_llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -119,11 +121,16 @@ class HybridRetriever:
     def __init__(self, vectorstore: Chroma, documents: List[Document]):
         self.vectorstore = vectorstore
         self.documents = documents
-        
+
         # BM25 인덱스 생성
         self.tokenized_corpus = [self._tokenize_with_metadata(doc) for doc in documents]
         self.bm25 = BM25Okapi(self.tokenized_corpus)
-        
+
+        # 본문 → corpus index 역참조 매핑
+        # (semantic 검색 결과 Document는 매번 새 객체라 id()로는 병합 불가.
+        #  안정적인 키인 page_content로 corpus index를 찾아 두 검색을 병합한다)
+        self._content_to_idx = {doc.page_content: i for i, doc in enumerate(documents)}
+
         logger.info(f"하이브리드 검색기 초기화 완료 (문서 수: {len(documents)})")
     
     def _tokenize(self, text: str) -> List[str]:
@@ -147,49 +154,51 @@ class HybridRetriever:
         
         return content_tokens
     
-    def retrieve(self, query: str, k: int = 8, alpha: float = 0.5) -> List[Document]:
+    def retrieve(self, query: str, k: int = 8, rrf_k: int = 60) -> List[Document]:
         """
-        하이브리드 검색 수행
-        
+        하이브리드 검색 수행 (Reciprocal Rank Fusion)
+
+        Semantic·BM25 각각의 순위를 RRF로 융합한다. 랭크 기반이라
+        거리 스케일(L2/cosine)이나 BM25 점수 스케일을 정규화할 필요가 없고,
+        두 검색 모두에서 상위권인 문서가 자연스럽게 부스팅된다.
+
         Args:
             query: 검색 쿼리
             k: 반환할 문서 수
-            alpha: BM25 가중치 (0.0=semantic only, 1.0=bm25 only)
+            rrf_k: RRF 상수 (클수록 하위 랭크 영향↑, 관례값 60)
         """
-        # 1. Semantic 검색
-        semantic_results = self.vectorstore.similarity_search_with_score(query, k=k*2)
-        semantic_dict = {id(doc): (doc, 1.0 - score) for doc, score in semantic_results}
-        
-        # 2. BM25 검색
+        # corpus index → RRF 누적 점수
+        rrf_scores: dict = {}
+
+        def _add_ranks(ranked_indices: List[int]):
+            for rank, idx in enumerate(ranked_indices):
+                if idx is None:
+                    continue
+                rrf_scores[idx] = rrf_scores.get(idx, 0.0) + 1.0 / (rrf_k + rank)
+
+        # 1. Semantic 검색 → corpus index 순위 리스트
+        semantic_results = self.vectorstore.similarity_search_with_score(query, k=k * 2)
+        semantic_ranked = [
+            self._content_to_idx.get(doc.page_content)
+            for doc, _ in semantic_results
+        ]
+        _add_ranks(semantic_ranked)
+
+        # 2. BM25 검색 → corpus index 순위 리스트
         query_tokens = self._tokenize(query)
         bm25_scores = self.bm25.get_scores(query_tokens)
-        
-        # 정규화
-        max_score = max(bm25_scores) if max(bm25_scores) > 0 else 1
-        bm25_scores = bm25_scores / max_score
-        
-        top_indices = np.argsort(bm25_scores)[::-1][:k*2]
-        bm25_dict = {
-            id(self.documents[i]): (self.documents[i], bm25_scores[i])
-            for i in top_indices if bm25_scores[i] > 0
-        }
-        
-        # 3. 하이브리드 스코어 계산
-        all_doc_ids = set(semantic_dict.keys()) | set(bm25_dict.keys())
-        hybrid_scores = {}
-        
-        for doc_id in all_doc_ids:
-            semantic_score = semantic_dict.get(doc_id, (None, 0))[1]
-            bm25_score = bm25_dict.get(doc_id, (None, 0))[1]
-            hybrid_score = alpha * bm25_score + (1 - alpha) * semantic_score
-            doc = semantic_dict.get(doc_id, bm25_dict.get(doc_id))[0]
-            hybrid_scores[doc_id] = (doc, hybrid_score)
-        
-        # 정렬 후 상위 k개 반환
-        sorted_docs = sorted(hybrid_scores.values(), key=lambda x: x[1], reverse=True)[:k]
-        
-        logger.info(f"하이브리드 검색 완료: {len(sorted_docs)}개 문서")
-        return [doc for doc, _ in sorted_docs]
+        bm25_ranked = [
+            int(i) for i in np.argsort(bm25_scores)[::-1][:k * 2]
+            if bm25_scores[i] > 0
+        ]
+        _add_ranks(bm25_ranked)
+
+        # 3. RRF 점수 순 정렬 후 상위 k개 반환
+        sorted_indices = sorted(rrf_scores, key=lambda i: rrf_scores[i], reverse=True)[:k]
+        result_docs = [self.documents[i] for i in sorted_indices]
+
+        logger.info(f"하이브리드 검색 완료: {len(result_docs)}개 문서 (RRF)")
+        return result_docs
 
 
 # =============================================================================
@@ -199,10 +208,15 @@ class HybridRetriever:
 class GuideEngine:
     """GUIDE 파이프라인용 RAG 엔진"""
     
+    # 응답 캐시 최대 항목 수
+    CACHE_MAX_SIZE = 128
+
     def __init__(self):
         self.embeddings: Optional[E5Embeddings] = None
         self.vectorstore: Optional[Chroma] = None
         self.hybrid_retriever: Optional[HybridRetriever] = None
+        # (message, grade, major) → (answer, source_docs) 경량 LRU 캐시
+        self._cache: "OrderedDict[tuple, Tuple[str, List[dict]]]" = OrderedDict()
         self._initialize()
 
     def _initialize(self):
@@ -254,9 +268,8 @@ class GuideEngine:
             raise
     
     def _call_gemini_api(self, prompt: str) -> Optional[str]:
-        """Gemini API 호출 (LLMService 공통 활용)"""
-        llm_service = LLMService(temperature=settings.llm_temperature)
-        return llm_service.call_gemini(prompt)
+        """Gemini API 호출 (LLMService 공유 인스턴스 활용)"""
+        return get_llm_service(temperature=settings.llm_temperature).call_gemini(prompt)
     
     def get_answer(
         self,
@@ -271,7 +284,15 @@ class GuideEngine:
             (answer_text, source_docs) 튜플
         """
         logger.info(f"GUIDE 파이프라인 시작: {message[:50]}...")
-        
+
+        # 응답 캐시 조회 (반복 질문 시 검색+LLM 스킵)
+        cache_key = (message.strip(), user_grade, user_major)
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            self._cache.move_to_end(cache_key)
+            logger.info("GUIDE 파이프라인: 캐시 히트")
+            return cached
+
         # 컨텍스트 쿼리 구성
         context_parts = []
         if user_grade:
@@ -286,7 +307,6 @@ class GuideEngine:
             retrieved_docs = self.hybrid_retriever.retrieve(
                 query=context_query,
                 k=settings.top_k_results,
-                alpha=0.4  # Semantic 60%, BM25 40%
             )
         else:
             retrieved_docs = self.vectorstore.similarity_search(
@@ -313,10 +333,11 @@ class GuideEngine:
             context=context
         )
         answer = self._call_gemini_api(prompt)
-        if answer is None:
+        llm_failed = answer is None
+        if llm_failed:
             answer = GUIDE_FALLBACK_MESSAGE
             logger.warning("GUIDE 파이프라인: fallback 메시지 사용")
-        
+
         # 출처 문서 구성 (중복 제거)
         source_docs = []
         seen_urls = set()
@@ -336,6 +357,14 @@ class GuideEngine:
                 seen_urls.add(url)
         
         logger.info(f"GUIDE 파이프라인 완료 (참조 문서 {len(source_docs)}개)")
+
+        # 정상 응답만 캐시에 저장 (LLM 실패 fallback은 캐시하지 않음)
+        if not llm_failed:
+            self._cache[cache_key] = (answer, source_docs)
+            self._cache.move_to_end(cache_key)
+            if len(self._cache) > self.CACHE_MAX_SIZE:
+                self._cache.popitem(last=False)
+
         return answer, source_docs
 
 

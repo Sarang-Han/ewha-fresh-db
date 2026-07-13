@@ -144,7 +144,7 @@ CSV_TEXTS = {
    ↓
    SCHEDULE_PROMPT_TEMPLATE
    ↓
-   Gemini 2.5 Pro
+   Gemini 2.5 Flash (→ Flash-Lite 폴백)
    ↓
 4. 필터링된 답변 + 고정 출처
 ```
@@ -206,7 +206,7 @@ sources = [
    ↓
 4. GUIDE_PROMPT_TEMPLATE + 검색 결과
    ↓
-5. Gemini 2.5 Pro
+5. Gemini 2.5 Flash (→ Flash-Lite 폴백)
    ↓
 6. 답변 + 실제 참조 출처
 ```
@@ -216,20 +216,25 @@ sources = [
 #### Semantic Search (벡터 유사도)
 ```python
 vectorstore.similarity_search_with_score(query, k=k*2)
-# E5 임베딩 기반 코사인 유사도
+# E5 임베딩(정규화) 기반 유사도 → 순위(rank)만 사용
 ```
 
 #### BM25 (키워드 검색)
 ```python
 BM25Okapi(tokenized_corpus)
 # 토큰화: 한국어 음절, 영어 단어, 숫자 분리
+# 메타데이터 가중: topics 3배, title 2배
 ```
 
-#### 하이브리드 스코어
+#### 하이브리드 융합 — Reciprocal Rank Fusion (RRF)
 ```python
-hybrid_score = alpha * bm25_score + (1 - alpha) * semantic_score
-# alpha = 0.4 (BM25 40%, Semantic 60%)
+# 각 검색기의 "순위"만으로 융합 → 점수 스케일 정규화 불필요
+score(doc) = Σ_retriever 1 / (rrf_k + rank_retriever(doc))
+# rrf_k = 60 (관례값). Semantic·BM25 양쪽 상위권 문서가 자연히 부스팅됨
 ```
+> 과거에는 `alpha * bm25 + (1 - alpha) * semantic` 가중합을 썼으나,
+> 서로 다른 Document 객체를 `id()`로 병합해 실제로는 융합되지 않던 버그가 있었다.
+> RRF는 corpus index 기반으로 두 결과를 정확히 병합하며, 거리 metric에 무관하다.
 
 ### 프롬프트
 ```python
@@ -362,7 +367,8 @@ return ChatResponse(session_id, answer, sources)
 | Vector Store | ChromaDB |
 | Embeddings | `intfloat/multilingual-e5-large-instruct` |
 | Keyword Search | rank-bm25 (BM25Okapi) |
-| LLM | Google Gemini 2.5 Pro |
+| Fusion | Reciprocal Rank Fusion (RRF, rrf_k=60) |
+| LLM | Google Gemini 2.5 Flash → Flash-Lite (폴백 체인) |
 
 ### LangChain
 - langchain-core, langchain-community
@@ -381,9 +387,9 @@ class Settings:
     # ChromaDB
     chroma_persist_dir: str = "./chroma_db"
     
-    # LLM 설정
-    llm_model: str = "gemini-2.5-pro"
+    # LLM 설정 (폴백 체인: 앞에서부터 순서대로 시도)
     llm_temperature: float = 0.3
+    model_chain: List[str] = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
     
     # 임베딩 모델
     embedding_model: str = "intfloat/multilingual-e5-large-instruct"

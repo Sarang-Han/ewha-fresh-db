@@ -6,8 +6,7 @@ from enum import Enum
 from typing import Optional
 import logging
 
-from app.config import settings
-from app.services.llm_service import LLMService
+from app.services.llm_service import get_llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -70,13 +69,6 @@ GUIDE_KEYWORDS = [
     "학점이월", "초과학점", "수업연한", "인문학 교양", "소프트웨어 교과목", "SW교과목",
 ]
 
-# Fallback 모델 체인 (순서대로 시도)
-MODEL_CHAIN = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-]
-
-
 # LLM 라우터 프롬프트 템플릿
 ROUTER_PROMPT_TEMPLATE = """[시스템 역할]
 당신은 이화여자대학교 학사 챗봇의 질문 분류기입니다.
@@ -111,57 +103,6 @@ ROUTER_PROMPT_TEMPLATE = """[시스템 역할]
 {message}
 
 분류 결과:"""
-
-
-def _call_gemini_for_classification(prompt: str) -> str:
-    """Gemini API 호출하여 분류 결과 반환 (Fallback 체인 적용)"""
-    import time
-    
-    for model in MODEL_CHAIN:
-        for attempt in range(2):  # 각 모델당 2번 재시도
-            try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-                headers = {"Content-Type": "application/json"}
-                data = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {
-                        "temperature": 0.1,  # 분류는 낮은 temperature
-                        "maxOutputTokens": 20,
-                    }
-                }
-                
-                response = requests.post(
-                    f"{url}?key={settings.google_api_key}",
-                    headers=headers,
-                    json=data,
-                    timeout=10
-                )
-                
-                if response.status_code != 200:
-                    logger.warning(f"[{model}] Intent 분류 API 응답 코드: {response.status_code}")
-                    raise requests.exceptions.HTTPError(f"{response.status_code}")
-                
-                result = response.json()
-                
-                if "candidates" in result and len(result["candidates"]) > 0:
-                    candidate = result["candidates"][0]
-                    if "content" in candidate and "parts" in candidate["content"]:
-                        text = candidate["content"]["parts"][0]["text"].strip().upper()
-                        logger.info(f"[{model}] Intent 분류 성공")
-                        return text
-                
-                return "OTHER"
-                
-            except Exception as e:
-                logger.warning(f"[{model}] Intent 분류 시도 {attempt + 1} 실패: {str(e)[:50]}")
-                if attempt < 1:
-                    time.sleep(0.5 * (attempt + 1))
-        
-        logger.warning(f"[{model}] 모든 재시도 실패, 다음 모델로 전환")
-    
-    # 모든 모델 실패 시 OTHER 반환 (가장 안전한 기본값)
-    logger.error("Intent 분류 API 모든 모델 실패, OTHER로 fallback")
-    return "OTHER"
 
 
 def classify_intent(
@@ -216,18 +157,20 @@ def classify_intent(
             guide_matched = keyword
             break
     
-    # 둘 다 매칭된 경우: GUIDE 우선 (규정/자격 질문이 일정보다 구체적)
-    # 예: "석사 과목 수강신청 가능?" → "석사" + "수강신청" 둘 다 있으면 GUIDE
+    # 둘 다 매칭된 경우: 하드 우선순위 없이 LLM 라우터에 위임
+    # (예: "석사 과목 수강 가능?"=GUIDE vs "석사 수강신청 언제?"=SCHEDULE 를
+    #  키워드만으로는 구분 불가 → 프롬프트 규칙을 아는 LLM이 판단)
     if guide_matched and schedule_matched:
-        logger.info(f"Intent 분류 (GUIDE '{guide_matched}' 우선, SCHEDULE '{schedule_matched}' 무시): GUIDE")
-        return Intent.GUIDE
+        logger.info(
+            f"Intent 분류 (GUIDE '{guide_matched}' + SCHEDULE '{schedule_matched}' 동시 매칭): LLM 위임"
+        )
     elif guide_matched:
         logger.info(f"Intent 분류 (키워드 '{guide_matched}' 매칭): GUIDE")
         return Intent.GUIDE
     elif schedule_matched:
         logger.info(f"Intent 분류 (키워드 '{schedule_matched}' 매칭): SCHEDULE")
         return Intent.SCHEDULE
-    
+
     # 2단계: LLM 라우터로 분류
     logger.info("Intent 분류: LLM 라우터 사용")
     
@@ -237,8 +180,7 @@ def classify_intent(
         message=message
     )
     
-    llm_service = LLMService(temperature=0.1)
-    llm_result = llm_service.call_gemini(prompt, max_tokens=20) or "OTHER"
+    llm_result = get_llm_service(temperature=0.1).call_gemini(prompt, max_tokens=20) or "OTHER"
     
     # 결과 파싱 (SCHEDULE, GUIDE, OTHER 중 하나만 추출)
     if "SCHEDULE" in llm_result:

@@ -7,7 +7,7 @@ from datetime import datetime
 import logging
 
 from app.config import settings
-from app.services.llm_service import LLMService
+from app.services.llm_service import get_llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -153,9 +153,8 @@ FALLBACK_MESSAGE = """😥 지금 서버가 조금 바빠서 답변을 생성하
 
 
 def _call_gemini_api(prompt: str) -> Optional[str]:
-    """Gemini API 호출 (LLMService 공통 활용)"""
-    llm_service = LLMService(temperature=settings.llm_temperature)
-    return llm_service.call_gemini(prompt)
+    """Gemini API 호출 (LLMService 공유 인스턴스 활용)"""
+    return get_llm_service(temperature=settings.llm_temperature).call_gemini(prompt)
 
 
 def answer_schedule_question(

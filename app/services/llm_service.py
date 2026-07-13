@@ -9,16 +9,18 @@ logger = logging.getLogger(__name__)
 
 class LLMService:
     """Gemini API 호출 및 재시도/폴백 정책을 통합 관리하는 공통 서비스"""
-    
+
     def __init__(self, temperature: float = settings.llm_temperature):
         self.temperature = temperature
         self.model_chain = settings.model_chain
         self.api_key = settings.google_api_key
+        # 커넥션 재사용을 위한 세션 (TCP/TLS 핸드셰이크 절감)
+        self.session = requests.Session()
 
     def call_gemini(
-        self, 
-        prompt: str, 
-        max_tokens: int = 8192, 
+        self,
+        prompt: str,
+        max_tokens: int = 8192,
         temperature: Optional[float] = None
     ) -> Optional[str]:
         """
@@ -27,7 +29,7 @@ class LLMService:
         """
         temp = temperature if temperature is not None else self.temperature
         last_error = None
-        
+
         for model in self.model_chain:
             # 각 모델당 최대 2번 재시도
             for attempt in range(2):
@@ -42,34 +44,53 @@ class LLMService:
                             "maxOutputTokens": max_tokens,
                         }
                     }
-                    
-                    response = requests.post(
+
+                    response = self.session.post(
                         f"{url}?key={self.api_key}",
                         headers=headers,
                         json=data,
                         timeout=30
                     )
-                    
+
                     if response.status_code != 200:
                         logger.warning(f"[{model}] API 응답 에러: {response.status_code}")
                         raise requests.exceptions.HTTPError(f"{response.status_code}: {response.text[:200]}")
-                    
+
                     result = response.json()
                     if "candidates" in result and len(result["candidates"]) > 0:
                         candidate = result["candidates"][0]
                         if "content" in candidate and "parts" in candidate["content"]:
                             logger.info(f"[{model}] LLM 호출 성공")
                             return candidate["content"]["parts"][0]["text"]
-                    
+
                     raise ValueError("API 응답 파싱 실패")
-                    
+
                 except Exception as e:
                     last_error = e
                     logger.warning(f"[{model}] 시도 {attempt + 1} 실패: {str(e)[:100]}")
                     if attempt < 1:  # 마지막 시도가 아니면 대기
                         time.sleep(1 * (attempt + 1))  # 1초, 2초 대기
-            
+
             logger.warning(f"[{model}] 모든 재시도 실패, 다음 모델로 전환합니다.")
-        
+
         logger.error(f"모든 모델 호출에 실패했습니다. 마지막 에러: {last_error}")
         return None
+
+
+# =============================================================================
+# 공유 인스턴스 (temperature별 재사용)
+# =============================================================================
+
+_llm_services: dict = {}
+
+
+def get_llm_service(temperature: float = settings.llm_temperature) -> LLMService:
+    """
+    temperature별 LLMService 공유 인스턴스를 반환합니다.
+
+    호출마다 새 인스턴스를 만들지 않고 requests.Session을 재사용합니다.
+    """
+    key = round(temperature, 3)
+    if key not in _llm_services:
+        _llm_services[key] = LLMService(temperature=temperature)
+    return _llm_services[key]
